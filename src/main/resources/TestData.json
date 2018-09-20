@@ -1,0 +1,42 @@
+{
+  "Environment":"QA",
+  "URL":"http://www.newtours.demoaut.com",
+  "userName":"tutorial",
+  "password":"tutorial",
+  "LondonToParis":{
+    "flightType":"roundTrip",
+    "passengers":"1",
+    "departingFrom":"London",
+    "departingMonth":"July",
+    "departingDay":"17",
+    "arrivingIn":"Paris",
+    "arrivingMonth":"July",
+    "arrivingDay":"28",
+    "serviceClass":"First",
+    "airlinePreference":"Unified Airlines"
+  },
+  "ParisToZurich":{
+    "flightType":"roundTrip",
+    "passengers":"1",
+    "departingFrom":"Paris",
+    "departingMonth":"July",
+    "departingDay":"17",
+    "arrivingIn":"Zurich",
+    "arrivingMonth":"July",
+    "arrivingDay":"28",
+    "serviceClass":"Business",
+    "airlinePreference":"Unified Airlines"
+  },
+  "AcapulcoToFrankfurt":{
+    "flightType":"roundTrip",
+    "passengers":"1",
+    "departingFrom":"Acapulco",
+    "departingMonth":"July",
+    "departingDay":"17",
+    "arrivingIn":"Frankfurt",
+    "arrivingMonth":"July",
+    "arrivingDay":"28",
+    "serviceClass":"Business",
+    "airlinePreference":"Unified Airlines"
+  }
+}

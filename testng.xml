@@ -1,0 +1,20 @@
+<!DOCTYPE suite SYSTEM "http://testng.org/testng-1.0.dtd" >
+
+<suite name="Mercury Demo Tours" parallel="classes" verbose="1" >
+
+    <!--<listeners>-->
+        <!--<listener class-name="com.rajhaldar.Listeners.Listeners" />-->
+    <!--</listeners>-->
+    <parameter name="browser" value="Chrome"/>
+    <parameter name="testDataFile" value="TestData"/>
+
+    <test name="com.rajhaldar" >
+        <classes>
+            <!--<class name="com.rajhaldar.LondonToParisValidateRate" />-->
+            <!--<class name="com.rajhaldar.ParisToZurichValidateRate" />-->
+            <class name="com.rajhaldar.AcapulcoToFrankfurtValidateRate" />
+            <class name="com.rajhaldar.HeadlessTest" />
+        </classes>
+    </test>
+
+</suite>
