@@ -45,11 +45,9 @@ public class LondonToParisValidateRate {
     }
 
     @BeforeMethod
-    @Parameters({"browser"})
-    public void initializeWebDriver(String browser) {
-
-        driver = new InitializeBrowser().initializeBrowserSettings(browser, driver, false);
-
+    @Parameters({"browser", "headless"})
+    public void initializeWebDriver(String browser, Boolean headless) {
+        driver = new InitializeBrowser().initializeBrowserSettings(browser, driver, headless);
     }
 
     @AfterMethod

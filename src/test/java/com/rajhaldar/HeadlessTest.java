@@ -1,9 +1,7 @@
 package com.rajhaldar;
 
 import com.jayway.restassured.path.json.JsonPath;
-import com.rajhaldar.Actions.InitializeBrowser;
-import com.rajhaldar.Actions.LaunchApplication;
-import com.rajhaldar.Actions.Login;
+import com.rajhaldar.Actions.*;
 import com.rajhaldar.Utilities.Environment;
 import com.rajhaldar.Utilities.TestData;
 import org.openqa.selenium.WebDriver;
@@ -66,6 +64,10 @@ public class HeadlessTest {
 
         Assert.assertTrue(new LaunchApplication().launchApp(driver, url));
         Assert.assertTrue(new Login().login(driver, userName, password));
+        Assert.assertTrue(new EnterFlightDetails().EnterDetails(driver, fType, pass, dCity, aCity));
+        Assert.assertTrue(new EnterFlightDetails().EnterDates(driver, dMonth, dDay, aMonth, aDay));
+        Assert.assertTrue(new EnterFlightDetails().FlightPreferencesAndContinue(driver, sClass, airline));
+        Assert.assertTrue(new SelectFlights().ValidateDepartureRates(driver));
     }
 
 
