@@ -1,0 +1,964 @@
+package com.parchment.actions;
+
+import com.google.common.base.Verify;
+import com.google.common.base.VerifyException;
+import com.jayway.restassured.RestAssured;
+import com.jayway.restassured.builder.RequestSpecBuilder;
+import com.jayway.restassured.path.json.JsonPath;
+import com.jayway.restassured.response.Response;
+import com.jayway.restassured.specification.RequestSpecification;
+import com.parchment.constants.TestConstants;
+import com.parchment.constants.TestEnum;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.stereotype.Component;
+import javax.json.JsonObject;
+import javax.json.Json;
+
+import java.util.List;
+import java.util.Map;
+
+@Component
+public class PrintOpsAPI {
+    static final Logger logger = LoggerFactory.getLogger(PrintOpsAPI.class);
+    private String createdImdId;
+    private String createdPrintManifestDID;
+    private String createdPrintManifestId;
+    private String createdManifestHistoryId;
+    private String printHistoryManifestId;
+    private String facilityId;
+    private String facilityName;
+    @Autowired
+    private AccessToken accessToken;
+    @Autowired
+    private GetResponse getResponse;
+    @Value("${spring.data.printops.url}")
+    private String basicUrl;
+    @Value("${spring.data.printopstoken.url}")
+    private String tokenUrl;
+
+    public boolean getUspsFacilities() {
+        logger.info("getUspsFacilities");
+        try {
+            String apiUrl = basicUrl + "usps/facilities";
+            Response response = getResponse.getResponse( null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            if (response.getStatusCode() == 200) {
+                String responseBody = response.asString();
+                responseBody = responseBody.substring(1, responseBody.length() - 1);
+                String responseFacilityId = new JsonPath(responseBody).get("facilityId");
+                String responseFacilityName = new JsonPath(responseBody).get("name");
+                Verify.verify(responseFacilityId.equals(facilityId));
+                Verify.verify(responseFacilityName.equals(facilityName));
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean getUspsByFacilityId() {
+        logger.info("getUspsByFacilityId");
+        try {
+            String apiUrl = basicUrl + "usps/facility/" + facilityId;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            if (response.getStatusCode() == 200) {
+                String responseBody = response.asString();
+                responseBody = responseBody.substring(1, responseBody.length() - 1);
+                Verify.verify(new JsonPath(responseBody).get("facilityId").equals(facilityId));
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean getManifestsbyStatus(String status) {
+        logger.info("getManifestsbyStatus");
+        try {
+            String apiUrl = basicUrl + "manifests?status=" + status;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            if (response.getStatusCode() == 200) {
+                String responseBody = response.asString();
+                List<Map<Object, Object>> statusList = new JsonPath(responseBody).get();
+                for (Map<Object, Object> map : statusList) {
+                    Verify.verify(map.get("status").equals(status));
+                }
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean getManifestsByDID(String did) {
+        logger.info("getManifestsByDID");
+        try {
+            String apiUrl = basicUrl + "manifests/did/" + did;
+            Response response= getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            if (response.getStatusCode() == 200) {
+                String responseBody = response.asString();
+                responseBody = responseBody.substring(1, responseBody.length() - 1);
+                List<Map<Object, Object>> didList = new JsonPath(responseBody).get("documents");
+                for (Map<Object, Object> map : didList) {
+                    if (map.get("did").equals(did)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean getManifestsByTrackingCode(String trackingCode) {
+        logger.info("getManifestsByTrackingCode");
+        try {
+            String apiUrl = basicUrl + "manifests/tracking?trackingCode=" + trackingCode;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            if (response.getStatusCode() == 200) {
+                String responseBody = response.asString();
+                Verify.verify(new JsonPath(responseBody).get("trackingId").equals(trackingCode));
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean getManifestsByManifestId(int manifestId) {
+        logger.info("getManifestsByManifestId");
+        try {
+            String apiUrl = basicUrl + "manifests/" + manifestId;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            if (response.getStatusCode() == 200) {
+                String responseBody = response.asString();
+                Verify.verify(new JsonPath(responseBody).get("id").equals(manifestId));
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean getImbByTrackingCode(String trackingCode) {
+        logger.info("getImbByTrackingCode");
+        try {
+            String apiUrl = basicUrl + "imb?trackingCode=" + trackingCode + "&page=0&size=100";
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            String responseBody = response.asString();
+            List<Map<Object, Object>> trackingCodeList = new JsonPath(responseBody).get();
+            for (Map<Object, Object> map : trackingCodeList) {
+                Verify.verify(map.get("trackingCode").toString().replaceAll("[-+^]*", "").contains(trackingCode));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean deleteManifestsHistory() {
+        try {
+            String apiUrl = basicUrl + "manifests/" + printHistoryManifestId + "/history/" +  createdManifestHistoryId;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.DELETE.toString());
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            logger.info("Manifests History is deleted with manifestId+ " + printHistoryManifestId + " and id" + createdManifestHistoryId);
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean deletePrintManifest() {
+        logger.info("deletePrintManifest");
+        try {
+            String apiUrl = basicUrl + "manifests/" + createdPrintManifestId;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.DELETE.toString());
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean importFacilityData(String facilityId, String facilityName) {
+        logger.info("postFacilityData");
+        try {
+            String apiUrl = basicUrl + "usps/facilities";
+            ClassPathResource cpr = new ClassPathResource("data/PrintOpsAPI/FSLT.csv");
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().contentType("multipart/form-data").multiPart("file", cpr.getFile())
+                        .formParam("FCLT ID", facilityId).formParam("FCLT NAME", facilityName).formParam("DISTRICT CODE", 996)
+                        .formParam("DISTRICT NAME", "ALASKA").formParam("AREA CODE", "4E").formParam("AREA NAME", "WESTERN")
+                        .formParam("LOCALE KEY", "Z10162").formParam("LOCALE TYPE", "P").formParam("FINANCE", 024564)
+                        .post(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).contentType("multipart/form-data").multiPart("file", cpr.getFile())
+                        .formParam("FCLT ID", facilityId).formParam("FCLT NAME", facilityName).formParam("DISTRICT CODE", 996)
+                        .formParam("DISTRICT NAME", "ALASKA").formParam("AREA CODE", "4E").formParam("AREA NAME", "WESTERN")
+                        .formParam("LOCALE KEY", "Z10162").formParam("LOCALE TYPE", "P").formParam("FINANCE", 024564)
+                        .post(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            this.facilityId = facilityId;
+            this.facilityName = facilityName;
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    private static String readFile(String folderName, String fileName) {
+        logger.info("Read File");
+        try {
+            ClassPathResource cpr = new ClassPathResource("data/" + folderName + "/" + fileName);
+            String content = FileUtils.readFileToString(cpr.getFile(), "UTF-8");
+            return content;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Checking 200, 400, 500 Response Codes for POST/imb
+     */
+    public Boolean  createImb(Integer expectedResponseCode, String facilityId, String id, String operationCode, String printManifestId, String routingCode, String trackingCode) {
+        logger.info("createImb");
+        try {
+            String apiUrl=basicUrl+"imb";
+            JsonObject json = Json.createObjectBuilder()
+                    .add("facilityId", facilityId)
+                    .add("id", id)
+                    .add("lastModified", TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("operationCode", operationCode)
+                    .add("printManifestId", printManifestId)
+                    .add("routingCode", routingCode)
+                    .add("scanTime", TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("submitted", TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("trackingCode", trackingCode)
+                    .build();
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(json.toString());
+            builder.setContentType(TestConstants.CONTENT_TYPE_WITH_CHARACTER_ENCODING);
+            RequestSpecification requestSpec = builder.build();
+            Response response = getResponse.getResponse(requestSpec, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.POST.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                this.createdImdId = new JsonPath(responseBody).get("id").toString();
+                logger.info("Imb is created with  id .. " + createdImdId);
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_MESSAGE , errorMessageList.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200, 400, 500 Response Codes for POST/manifests/{manifestId}/history
+     */
+    public boolean createManifestsHistory(Integer expectedResponseCode, String manifestId, String id, String status){
+        logger.info("postManifestsHistory");
+        try {
+            String apiUrl=basicUrl+"manifests/"+manifestId + "/history";
+            JsonObject json = Json.createObjectBuilder()
+                    .add("id" , id)
+                    .add("printManifestId" , TestConstants.PRINTOPS_PRINTMANIFEST_ID)
+                    .add("status" , status)
+                    .add("statusChangeTime" , TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("statusComments" , TestConstants.PRINTOPS_STATUS_COMMENTS)
+                    .add("userId" , TestConstants.PRINTOPS_USER_ID)
+                    .build();
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(json.toString());
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response = getResponse.getResponse(requestSpec, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.POST.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                Verify.verify(new JsonPath(responseBody).get("printManifestId").toString().equals(manifestId));
+                this.createdManifestHistoryId = new JsonPath(responseBody).get("id").toString();
+                this.printHistoryManifestId = new JsonPath(responseBody).get("printManifestId").toString();
+                logger.info("Manifests History is created with  id .. " + createdManifestHistoryId);
+                return true;
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_MESSAGE , errorMessageList.get(0));
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200, 500 Response Codes for POST/manifests
+     */
+    public boolean createPrintManifest(Integer expectedResponseCode, String memberId, String pageCount, String paperType, String envelopeType, String id, String shippingMethod, String status, String trackingType){
+        logger.info("createPrintManifest");
+        try {
+            String apiUrl=basicUrl+"manifests/";
+            JsonObject json = Json.createObjectBuilder()
+                    .add("destination", Json.createObjectBuilder()
+                            .add("addressLine1", TestConstants.PRINTOPS_ADDRESS)
+                            .add("city", TestConstants.PRINTOPS_CITY)
+                            .add("country", TestConstants.PRINTOPS_COUNTRY)
+                            .add("fullName", TestConstants.PRINTOPS_FULLNAME)
+                            .add("memberId", memberId)
+                            .add("state", TestConstants.PRINTOPS_STATE)
+                            .add("zip", TestConstants.PRINTOPS_ZIP))
+                    .add("documents", Json.createArrayBuilder()
+                            .add(Json.createObjectBuilder()
+                                    .add("did", TestConstants.PRINTOPS_DID)
+                                    .add("documentType", TestConstants.PRINTOPS_DOCUMENT_TYPE)
+                                    .add("pageCount", pageCount)
+                                    .add("paperType", paperType)
+                                    .add("paperTypeCustomName", "")
+                                    .add("printBothSides", Boolean.TRUE)
+                                    .add("quantity", "0")
+                                    .add("sortOrder", "0")
+                                    .add("uri", "")))
+                    .add("envelopeType", envelopeType)
+                    .add("id", id)
+                    .add("lastModified", TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("printCoverPage", "")
+                    .add("shippingMethod", shippingMethod)
+                    .add("source",Json.createObjectBuilder()
+                            .add("addressLine1", TestConstants.PRINTOPS_ADDRESS)
+                            .add("city", TestConstants.PRINTOPS_CITY)
+                            .add("country", TestConstants.PRINTOPS_COUNTRY)
+                            .add("fullName", TestConstants.PRINTOPS_FULLNAME)
+                            .add("memberId", memberId)
+                            .add("state", TestConstants.PRINTOPS_STATE)
+                            .add("zip", TestConstants.PRINTOPS_ZIP))
+                    .add("sourceSystem", TestConstants.PRINTOPS_SOURCE_SYSTEM)
+                    .add("status", status)
+                    .add("submitted", TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("trackingId", "String")
+                    .add("trackingType", trackingType)
+                    .add("useBarCode", Boolean.TRUE)
+                    .build();
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(json.toString());
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response = getResponse.getResponse(requestSpec, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.POST.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                this.createdPrintManifestId = new JsonPath(responseBody).get("id").toString();
+                logger.info("Print Manifest is created with id .. " + createdPrintManifestId);
+                List<Map<Object, Object>> didList = new JsonPath(responseBody).get("documents");
+                for (Map<Object, Object> map : didList) {
+                    this.createdPrintManifestDID = map.get("did").toString();
+                }
+                return true;
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_MESSAGE , errorMessageList.get(0));
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Checking 200, 500 for DELETE/imb/{id}
+     */
+    public Boolean deleteImb(Integer expectedResponseCode, String imbId) {
+        logger.info("deleteImb");
+        try {
+            if (StringUtils.isEmpty(imbId)) {
+                imbId = this.createdImdId;
+            }
+            String apiUrl=basicUrl+"imb/"+imbId;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.DELETE.toString());
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if( 200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                logger.info("IMB id deleted with id .. " + imbId);
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                String responseBody = response.asString();
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_MESSAGE , errorMessageList.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200 Empty Response for GET/imb
+     */
+    public  Boolean getEmptyResponseGetImb(Integer expectedResponseCode, String trackingCode, String did, String manifestId, String page, String size) {
+        logger.info("getEmptyResponseGetImb");
+        try {
+            String apiUrl = getApiUriGetImb(trackingCode, did, manifestId, page, size);
+            logger.info(apiUrl);
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+            String responseBody = response.asString();
+            List<Map<Object, Object>> imbList = new JsonPath(responseBody).get();
+            Verify.verify(imbList.size() == 0);
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200 Empty Response for GET/imb/{id}
+     */
+    public  Boolean getEmptyResponseGetImbById(Integer expectedResponseCode, String imbId) {
+        logger.info("getEmptyResponseGetImbById");
+        try {
+            String apiUrl = getApiUriGetImbById(imbId);
+            logger.info(apiUrl);
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+            String responseBody = response.asString();
+            Verify.verify(responseBody.equals(""));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200 Empty Response for GET/manifests/did/{did}
+     */
+    public  Boolean getEmptyResponsePrintManifestsByDID(Integer expectedResponseCode, String did) {
+        logger.info("getEmptyResponsePrintManifestsByDID");
+        try {
+            String apiUrl=basicUrl+"manifests/did/"+did;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+            String responseBody = response.asString();
+            responseBody = responseBody.substring(1, responseBody.length() - 1);
+            Verify.verify(responseBody.isEmpty());
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200 Empty Response for GET/manifests/{id}
+     */
+    public  Boolean getEmptyResponsePrintManifestsByManifestId(Integer expectedResponseCode, String manifestId) {
+        logger.info("getEmptyResponsePrintManifestsByManifestId");
+        try {
+            String apiUrl=basicUrl+"manifests/did/"+manifestId;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+            String responseBody = response.asString();
+            responseBody = responseBody.substring(1, responseBody.length() - 1);
+            Verify.verify(responseBody.isEmpty());
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200 Empty Response for GET/usps/facility/{id}
+     */
+    public Boolean getEmptyResponseUspsByFacilityId(Integer expectedResponseCode, String facilityId) {
+        logger.info("getEmptyResponseUspsByFacilityId");
+        try {
+            String apiUrl=basicUrl+"usps/facility/"+facilityId;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            if (200 == response.getStatusCode()) {
+                String responseBody = response.asString();
+                responseBody = responseBody.substring(1, responseBody.length() - 1);
+                Verify.verify(responseBody.isEmpty());
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Checking 200, 400, 500 Response Codes for GET/imb
+     */
+    public  Boolean getImb(Integer expectedResponseCode, String trackingCode, String did, String manifestId, String page, String size) {
+        logger.info("getImb");
+        String testCaseName = "";
+        Boolean passed = true;
+        try {
+            String apiUrl = getApiUriGetImb(trackingCode, did, manifestId, page, size);
+            logger.info(apiUrl);
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<Map<Object, Object>> imbList = new JsonPath(responseBody).get();
+                if (trackingCode == null && did == null && manifestId == null && page == null && size == null) {
+                    testCaseName = "verify all filters null";
+                    try {
+                        Verify.verify(imbList.size() > 0, TestConstants.VERIFICATION_MESSAGE + testCaseName);
+                    } catch (VerifyException e) {
+                        logger.error(e.getMessage());
+                        return false;
+                    }
+                }
+                if(trackingCode != null) {
+                    testCaseName = "verify trackingCode";
+                    passed = passed & verifyResponseDataGetImb(imbList, "trackingCode", trackingCode, testCaseName);
+                }
+                if(did != null) {
+                    // code to be added -- Check DB for getting did for trackingCode/manifestId
+                }
+                if(manifestId != null) {
+                    testCaseName = "verify manifestId";
+                    passed = passed & verifyResponseDataGetImb(imbList, "printManifestId", manifestId, testCaseName);
+                }
+                if(page != null) {
+                    // code to be added -- Need to check with developer for the page issue
+                }
+                if(size != null) {
+                    testCaseName = "verify filter size";
+                    try {
+                        Verify.verify(imbList.size() <= Integer.parseInt(size), TestConstants.VERIFICATION_MESSAGE + testCaseName);
+                    } catch (VerifyException e) {
+                        logger.error(e.getMessage());
+                        return false;
+                    }
+                }
+                return passed;
+
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_MESSAGE , errorMessageList.get(0));
+            }
+            return passed;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200, 500 for GET/imb/{id}
+     */
+    public  Boolean getImbById(Integer expectedResponseCode , String imbId) {
+        logger.info("getImbById");
+        try {
+            if (StringUtils.isEmpty(imbId)) {
+                imbId = this.createdImdId;
+            }
+            String apiUrl = getApiUriGetImbById(imbId);
+            logger.info("Getting IMB details for .. " + imbId);
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                int responseImbId = new JsonPath(responseBody).get("id");
+                Verify.verify(responseImbId == Integer.parseInt(imbId));
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE , errorMessageList.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200, 400, 500 Response Codes for GET/manifests/{manifestId}/history/{id}
+     */
+    public  boolean getManifestsHistoryByManifestIdAndId(Integer expectedResponseCode, String manifestId, String id) {
+        logger.info("getManifestsHistoryByManifestIdAndId");
+        try {
+            if (StringUtils.isEmpty(manifestId) && StringUtils.isEmpty(id)){
+                manifestId = this.printHistoryManifestId ;
+                id = this.createdManifestHistoryId;
+            }
+            if (StringUtils.isEmpty(manifestId) ){
+                manifestId = this.printHistoryManifestId ;
+            }
+            if (StringUtils.isEmpty(id)){
+                id = this.createdManifestHistoryId;
+            }
+            String apiUrl=basicUrl+"manifests/"+manifestId+ "/history/"+id;
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                Verify.verify(new JsonPath(responseBody).get("printManifestId").toString().equals(manifestId));
+                Verify.verify(new JsonPath(responseBody).get("id").toString().equals(id));
+                return true;
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE , errorMessageList.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200, 400, 500 Response codes for GET/manifests/{manifestId}/history
+     */
+    public  boolean getManifestsHistoryByManifestId(Integer expectedResponseCode, String manifestId, String status, String page, String size ) {
+        logger.info("getManifestsHistoryByManifestId");
+        String testCaseName;
+        Boolean passed = true;
+        try {
+            if (StringUtils.isEmpty(manifestId)) {
+                manifestId = this.printHistoryManifestId;
+            }
+            String apiUrl = getApiUriGetManifestStatusHistoryController(manifestId, status, page, size);
+            Response response = getResponse.getResponse(null, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.GET.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<Map<Object, Object>> responseJsonList = new JsonPath(responseBody).get();
+                if (manifestId != null && status == null && page == null && size == null) {
+                    testCaseName = "verify all filters null";
+                    try {
+                        Verify.verify(verifyResponseDataGetImb(responseJsonList,"printManifestId", manifestId, testCaseName));
+                        Verify.verify(responseJsonList.size() > 0, TestConstants.VERIFICATION_MESSAGE + testCaseName);
+                    } catch (VerifyException e) {
+                        logger.error(e.getMessage());
+                        return false;
+                    }
+                }
+                if(status != null) {
+                    testCaseName = "verify status";
+                    passed = passed & verifyResponseDataGetImb(responseJsonList, "status", status, testCaseName);
+                }
+                if(page != null) {
+                    // code to be added -- Need to check with developer for the page issue
+                }
+                if(size != null) {
+                    testCaseName = "verify size";
+                    try {
+                        Verify.verify(responseJsonList.size() <= Integer.parseInt(size), TestConstants.VERIFICATION_MESSAGE + testCaseName);
+                    } catch (VerifyException e) {
+                        logger.error(e.getMessage());
+                        return false;
+                    }
+                }
+                return passed;
+
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE , errorMessageList.get(0));
+            }
+            return passed;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200, 400, 404, 500 for PUT/imb/{id}
+     */
+    public Boolean upadteImb(Integer expectedResponseCode, String id, String imbId, String facilityId, String operationCode, String trackingCode) {
+        logger.info("upadteImb");
+        try {
+            if (StringUtils.isEmpty(id) && StringUtils.isEmpty(imbId)) {
+                id = this.createdImdId;
+                imbId = this.createdImdId;
+            }
+            String apiUrl=basicUrl+"imb/"+ id;
+            JsonObject json = Json.createObjectBuilder()
+                    .add("id" , imbId)
+                    .add("facilityId" , facilityId)
+                    .add("operationCode" , operationCode)
+                    .add("scanTime" , TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("routingCode", "")
+                    .add("trackingCode" , trackingCode)
+                    .add("printManifestId" , "")
+                    .add("submitted", TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("lastModified" , TestConstants.DATE_WITH_TIMESTAMP)
+                    .build();
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(json.toString());
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response = getResponse.getResponse(requestSpec, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.PUT.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                createdImdId = new JsonPath(responseBody).get("id").toString();
+                logger.info("Imb is updated with  id .. " + createdImdId);
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_MESSAGE , errorMessageList.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Checking 200, 400, 500 Response Codes for PUT/manifests/{manifestId}/history/{id}
+     */
+    public boolean updateManifestsHistory(Integer expectedResponseCode, String manifestId, String inputId, String id, String printManifestId, String status){
+        logger.info("updateManifestsHistory");
+        try {
+            if (StringUtils.isEmpty(manifestId) && StringUtils.isEmpty(inputId) && StringUtils.isEmpty(id) && StringUtils.isEmpty(printManifestId)) {
+                manifestId = this.printHistoryManifestId;
+                printManifestId = this.printHistoryManifestId;
+                inputId = this.createdManifestHistoryId;
+                id = this.createdManifestHistoryId;
+            }
+            String apiUrl=basicUrl+"manifests/"+manifestId + "/history/"+ inputId;
+            JsonObject json = Json.createObjectBuilder()
+                    .add("id" , id)
+                    .add("printManifestId" , printManifestId)
+                    .add("status" , status)
+                    .add("statusChangeTime" , TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("statusComments" , TestConstants.PRINTOPS_STATUS_COMMENTS)
+                    .add("userId" , TestConstants.PRINTOPS_USER_ID)
+                    .build();
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(json.toString());
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response = getResponse.getResponse(requestSpec, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.PUT.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                this.createdManifestHistoryId = new JsonPath(responseBody).get("id").toString();
+                logger.info("Manifests History is updated with id .. " + createdManifestHistoryId);
+                return true;
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_MESSAGE , errorMessageList.get(0));
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    /**
+     * Checking 200, 500 Response codes for PUT/manifests/{id}
+     */
+    public boolean updatePrintManifest(Integer expectedResponseCode, String manifestId, String memberId, String pageCount, String paperType, String envelopeType, String id, String shippingMethod, String status, String trackingType) {
+        logger.info("updatePrintManifest");
+        try {
+            if (StringUtils.isEmpty(manifestId) && StringUtils.isEmpty(id)) {
+                manifestId = this.createdPrintManifestId;
+                id = this.createdPrintManifestId;
+            }
+            String apiUrl=basicUrl+"manifests/"+manifestId;
+            JsonObject json = Json.createObjectBuilder()
+                    .add("destination", Json.createObjectBuilder()
+                            .add("addressLine1", TestConstants.PRINTOPS_ADDRESS)
+                            .add("city", TestConstants.PRINTOPS_CITY)
+                            .add("country", TestConstants.PRINTOPS_COUNTRY)
+                            .add("fullName", TestConstants.PRINTOPS_FULLNAME)
+                            .add("memberId", memberId)
+                            .add("state", TestConstants.PRINTOPS_STATE)
+                            .add("zip", TestConstants.PRINTOPS_ZIP))
+                    .add("documents", Json.createArrayBuilder()
+                            .add(Json.createObjectBuilder()
+                                    .add("did", TestConstants.PRINTOPS_DID)
+                                    .add("documentType", TestConstants.PRINTOPS_DOCUMENT_TYPE)
+                                    .add("pageCount", pageCount)
+                                    .add("paperType", paperType)
+                                    .add("paperTypeCustomName", "")
+                                    .add("printBothSides", Boolean.TRUE)
+                                    .add("quantity", "0")
+                                    .add("sortOrder", "0")
+                                    .add("uri", "")))
+                    .add("envelopeType", envelopeType)
+                    .add("id", id)
+                    .add("lastModified", TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("printCoverPage", "")
+                    .add("shippingMethod", shippingMethod)
+                    .add("source",Json.createObjectBuilder()
+                            .add("addressLine1", TestConstants.PRINTOPS_ADDRESS)
+                            .add("city", TestConstants.PRINTOPS_CITY)
+                            .add("country", TestConstants.PRINTOPS_COUNTRY)
+                            .add("fullName", TestConstants.PRINTOPS_FULLNAME)
+                            .add("memberId", memberId)
+                            .add("state", TestConstants.PRINTOPS_STATE)
+                            .add("zip", TestConstants.PRINTOPS_ZIP))
+                    .add("sourceSystem", TestConstants.PRINTOPS_SOURCE_SYSTEM)
+                    .add("status", status)
+                    .add("submitted", TestConstants.DATE_WITH_TIMESTAMP)
+                    .add("trackingId", "String")
+                    .add("trackingType", trackingType)
+                    .add("useBarCode", Boolean.TRUE)
+                    .build();
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(json.toString());
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response = getResponse.getResponse(requestSpec, basicUrl, apiUrl, tokenUrl, TestEnum.RestMethods.PUT.toString());
+            String responseBody = response.asString();
+            Verify.verify(verifyResponseCode(response, expectedResponseCode));
+
+            if (200 == expectedResponseCode) {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                this.createdPrintManifestId = new JsonPath(responseBody).get("id").toString();
+                logger.info("Print Manifest is updated for the  id .. " + createdPrintManifestId);
+                List<Map<Object, Object>> didList = new JsonPath(responseBody).get("documents");
+                for (Map<Object, Object> map : didList) {
+                    this.createdPrintManifestDID = map.get("did").toString();
+                }
+                return true;
+            } else {
+                logger.info (TestConstants.RESP_CODE , response.getStatusCode());
+                List<String> errorMessageList = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_MESSAGE , errorMessageList.get(0));
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    private Boolean verifyResponseCode(Response response, Integer expectedResponseCode) {
+        Boolean verifyResponseCode = true;
+        try {
+            Verify.verify(expectedResponseCode == response.getStatusCode());
+        } catch (Exception e) {
+            verifyResponseCode = false;
+            logger.info ("Expected response code : " + expectedResponseCode + " and " + "Actual response code : " + response.getStatusCode());
+        }
+        return verifyResponseCode;
+    }
+
+    private Boolean verifyResponseDataGetImb(List<Map<Object, Object>> list, String attrName, String attrVal, String testCaseName) {
+        for(Map<Object, Object> map:list) {
+            try {
+                Verify.verify(map.get(attrName).toString().equals(attrVal), TestConstants.VERIFICATION_MESSAGE + testCaseName);
+            } catch (VerifyException e) {
+                logger.error(e.getMessage());
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private String getApiUriGetImb(String trackingCode, String did, String manifestId, String page, String size) {
+        StringBuilder apiUrl = new StringBuilder(basicUrl);
+        apiUrl.append("imb?1=1");
+        if (StringUtils.isNotBlank(trackingCode)) {
+            apiUrl.append("&trackingCode=").append(trackingCode);
+        }
+        if (StringUtils.isNotBlank(did)) {
+            apiUrl.append("&did=").append(did);
+        }
+        if (StringUtils.isNotBlank(manifestId)) {
+            apiUrl.append("&manifestId=").append(manifestId);
+        }
+        if (StringUtils.isNotBlank(page)) {
+            apiUrl.append("&page=").append(page);
+        }
+        if (StringUtils.isNotBlank(size)) {
+            apiUrl.append("&size=").append(size);
+        }
+        return apiUrl.toString();
+    }
+
+    private String getApiUriGetManifestStatusHistoryController(String manifestId, String status, String page, String size) {
+        StringBuilder apiUrl = new StringBuilder(basicUrl);
+        apiUrl.append("manifests/").append(manifestId).append("/history");
+        if (StringUtils.isNotBlank(status)) {
+            apiUrl.append("?status=").append(status);
+        }
+        if (StringUtils.isNotBlank(page)) {
+            apiUrl.append("&page=").append(page);
+        }
+        if (StringUtils.isNotBlank(size)) {
+            apiUrl.append("&size=").append(size);
+        }
+        return apiUrl.toString();
+    }
+
+    private String getApiUriGetImbById(String imbId) {
+        StringBuilder apiUrl = new StringBuilder(basicUrl);
+        apiUrl.append("imb/").append(imbId);
+        return apiUrl.toString();
+    }
+}
