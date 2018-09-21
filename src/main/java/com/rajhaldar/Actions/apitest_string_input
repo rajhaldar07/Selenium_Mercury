@@ -1,0 +1,1182 @@
+package com.parchment.actions;
+
+import com.google.common.base.Verify;
+import com.jayway.restassured.RestAssured;
+import com.jayway.restassured.builder.RequestSpecBuilder;
+import com.jayway.restassured.path.json.JsonPath;
+import com.jayway.restassured.response.Response;
+import com.jayway.restassured.specification.RequestSpecification;
+import com.parchment.constants.TestConstants;
+import io.swagger.models.auth.In;
+import java.util.ArrayList;
+import javax.json.JsonObjectBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import javax.json.Json;
+import javax.json.JsonObject;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
+import java.util.Random;
+import java.util.Map;
+import java.util.HashMap;
+import org.testng.annotations.Test;
+
+@Component
+public class LearnerServiceAPI {
+    static final Logger logger = LoggerFactory.getLogger(LearnerServiceAPI.class);
+    @Autowired
+    private DatabaseConnection databaseConnection;
+    private int rosterStudentId;
+    @Autowired
+    private GenerateRandom randomString;
+    @Autowired
+    private StudentRegistration studentRegistration;
+    @Autowired
+    private AccessToken accessToken;
+    @Autowired
+    private GetResponse getResponse;
+    @Value("${spring.data.learnerService.url}")
+    private String basicUrl;
+    @Value("${spring.data.learnerServicetoken.url}")
+    private String tokenUrl;
+    private String smfMemberId;
+
+    public boolean createSMFMember(Integer expectedResponseCode, String studentEmail) {
+        logger.info("Create SMF Member");
+        try {
+            String apiUrl = basicUrl + "learner/smfmember";
+            int studentId = databaseConnection.getStudentId(studentEmail).get(0);
+            String body = "{ \"" + "studentFk" + "\": " + studentId + " }";
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(body);
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().accept("application/json").spec(requestSpec).post(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).accept("application/json").spec(requestSpec).post(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            smfMemberId = new JsonPath(response.asString()).get("smfMemberId").toString();
+            Verify.verify(successMessage.get(0).contains("Successfully created smf member"));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean getSmfMemberId(Integer expectedResponseCode, String studentEmail){
+        try{
+            String apiUrl = null;
+            if(expectedResponseCode == 200)
+                apiUrl = basicUrl.concat("learner/smfmember/").concat(this.smfMemberId);
+            else
+                apiUrl = basicUrl.concat("learner/smfmember/").concat("string");
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, null, apiUrl, tokenUrl,"GET");
+            String responseBody = response.asString();
+            if(expectedResponseCode == 200){
+                Verify.verify(new JsonPath(responseBody).get("emailAddress").equals(studentEmail));
+                logger.info("Validated smfMember details for Id {}", this.smfMemberId);
+            }else{
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        }catch (Exception e){
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean updateSmfMemberId(Integer expectedResponseCode, String studentEmail){
+        try{
+            String apiUrl = null;
+            if(expectedResponseCode == 200)
+                apiUrl = basicUrl.concat("learner/smfmember/").concat(this.smfMemberId);
+            else
+                apiUrl = basicUrl.concat("learner/smfmember/").concat("string");
+            JsonObject updateReq = Json.createObjectBuilder()
+                    .add("id", this.smfMemberId)
+                    .add("parchmentId","5967651")
+                    .add("parentId","")
+                    .add("firstName","CggIhhDiibbHAbc")
+                    .add("lastName", "CggIhhDiibbHAbc")
+                    .add("userName", "erek293zg4g9p4k3vpy3lopmm")
+                    .add("emailAddress", "AutoCggIhhDiibbH@qatest.us")
+                    .add("birthDate","1984-07-08")
+                    .add("deleted", "false")
+                    .add("activated", "false")
+                    .build();
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(updateReq.toString());
+            builder.setContentType("application/json");
+            RequestSpecification reqSpec = builder.build();
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, reqSpec, apiUrl, tokenUrl, "PUT");
+            String responseBody = response.asString();
+            if(expectedResponseCode == 200){
+                Verify.verify(new JsonPath(responseBody).get("firstName").equals("CggIhhDiibbHAbc"));
+                Verify.verify(new JsonPath(responseBody).get("lastName").equals("CggIhhDiibbHAbc"));
+                logger.info("Updated smfMember details for Id {}", this.smfMemberId);
+            }else{
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        }catch (Exception e){
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean getStudentByEmail(String studentEmail, boolean fakeUser) {
+        logger.info("Get Student By Email");
+        try {
+            String apiUrl = basicUrl + "learner/student?email=" + studentEmail + "&fakeUser=" + fakeUser;
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            Verify.verify(successMessage.get(0).contains("Successfully found Student"));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean findLearnerConsentByStudentIdAndProductId(String studentEmail, String productId) {
+        logger.info("Find Learner Consent By Student ID and Product ID");
+        try {
+            int studentid = databaseConnection.getStudentId(studentEmail).get(0);
+            String apiUrl = basicUrl + "learner/consent?studentId=" + studentid + "&productId=" + productId;
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            Verify.verify(successMessage.get(0).contains("Successfully find"));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean saveLearnerConsent(String studentEmail, String contentType, String orderRequesterType,
+                                      String productConsentTypeId, String productID, String senderMemberID) {
+        logger.info("Save Learner Consent");
+        try {
+            String apiUrl = basicUrl + "learner/consent";
+            int studentId = databaseConnection.getStudentId(studentEmail).get(0);
+            int individualId = databaseConnection.getIndividualId(studentEmail).get(0);
+            String base64EncodedConsentContent = "MTYxMTJhYmMtMjYwYy00OTM3LTk5MGQtZDQ0ZGZlNTJjYzhh";
+            String consentRequest = "{ \"" + "base64EncodedConsentContent" + "\": \"" + base64EncodedConsentContent
+                    + "\"," + "\"" + "contentType" + "\": \"" + contentType + "\"," + "\"" + "createIndFk" + "\": "
+                    + individualId + "," + "\"" + "fileName" + "\": \"abc\"," + "\"" + "orderRequesterId" + "\": "
+                    + individualId + "," + "\"" + "orderRequesterType" + "\": \"" + orderRequesterType + "\"," + "\""
+                    + "productConsentTypeId" + "\": " + productConsentTypeId + "," + "\"" + "productFk" + "\": "
+                    + productID + "," + "\"" + "senderMembrFk" + "\": " + senderMemberID + "," + "\"" + "studentFk"
+                    + "\": " + studentId + "}";
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(consentRequest);
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().accept("application/json").spec(requestSpec).post(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).accept("application/json").spec(requestSpec).post(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            int id = new JsonPath(response.getBody().asString()).get("studentProductConsent.id");
+            Verify.verify(successMessage.get(0)
+                    .contains("Successfully saved learn product consent uri with id "
+                            + id + " for student id " + studentId + ", product id "
+                            + productID));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean findLastLearnerConsent(String studentEmail, String productID, String senderMemberID) {
+        logger.info("Find Last Learner Consent");
+        try {
+            int studentId = databaseConnection.getStudentId(studentEmail).get(0);
+            int requesterId = databaseConnection.getRequesterId(studentEmail).get(0);
+            String apiUrl = basicUrl + "learner/consent/last?studentId=" + studentId + "&productId=" + productID + "&senderId=" + senderMemberID
+                    + "&requesterId=" + requesterId;
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            Verify.verify(successMessage.get(0).contains("Successfully found learner product consent"));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean findLearnerConsentById(String studentEmail) {
+        logger.info("Find Learner Consent By Id");
+        try {
+            int learnerConsentId = databaseConnection.getLearnerConsentId(studentEmail).get(0);
+            String apiUrl = basicUrl + "learner/consent/" + learnerConsentId;
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            Verify.verify(successMessage.get(0).contains("Successfully find learner product consent"));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean createLearner(String schoolName, String highestLevelEducation, boolean currentlyEnrolled, String dataReader) {
+        logger.info("Create Learner");
+        try {
+            String apiUrl = basicUrl + "learner/";
+            int studentId = 0, learnerId = 0;
+            List<Object> studentDetails;
+            String StudentFirstName = null, StudentLastName = null, StudentEmail = null, DOB = null;
+            switch (dataReader) {
+                case "studentRegistration":
+                case "database":
+                    studentRegistration.signUp(schoolName, currentlyEnrolled);
+                    StudentEmail = studentRegistration.studentEmail;
+                    studentDetails = databaseConnection.getStudentDetails(StudentEmail);
+                    studentId = (int) studentDetails.get(4);
+                    StudentFirstName = studentDetails.get(0).toString();
+                    StudentLastName = studentDetails.get(1).toString();
+                    DOB = studentDetails.get(2).toString();
+                    learnerId = databaseConnection.getLearnerId(StudentEmail).get(0);
+                    break;
+                case "roster":
+                    createRosterStudent(schoolName, currentlyEnrolled, "studentRegistration");
+                    StudentEmail = studentRegistration.studentEmail;
+                    studentDetails = databaseConnection.getStudentDetails(StudentEmail);
+                    studentId = (int) studentDetails.get(4);
+                    StudentFirstName = studentDetails.get(0).toString();
+                    StudentLastName = studentDetails.get(1).toString();
+                    DOB = studentDetails.get(2).toString();
+                    learnerId = databaseConnection.getLearnerId(StudentEmail).get(0);
+                    break;
+
+                case "dynamic":
+                    SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+                    Date date = simpleDateFormat.parse(simpleDateFormat.format(new Date()));
+                    Calendar calendar = Calendar.getInstance();
+                    calendar.setTime(date);
+                    calendar.add(Calendar.YEAR, -16);
+                    String randomText = randomString.string(10);
+                    Random student = new Random();
+                    studentId = 100000 + student.nextInt(900000);
+                    StudentFirstName = randomText;
+                    StudentLastName = randomText;
+                    StudentEmail = "Auto" + randomText + "@qatest.us";
+                    DOB = simpleDateFormat.format(calendar.getTime());
+                    Random learner = new Random();
+                    learnerId = 100000 + learner.nextInt(900000);
+                    break;
+            }
+            int memberId = databaseConnection.getMemberPKID(schoolName).get(0);
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            Date date = simpleDateFormat.parse(simpleDateFormat
+                    .format(new Date()));
+            Calendar calendar = Calendar.getInstance();
+            calendar.setTime(date);
+            calendar.add(Calendar.YEAR, -1);
+            int sDate = calendar.get(Calendar.YEAR);
+            calendar.add(Calendar.YEAR, 5);
+            int eDate = calendar.get(Calendar.YEAR);
+
+            String learnerRequest = "{ \"" + "createSmfMemberOnly" + "\": false," + "\"" + "createStudentMemberOnly"
+                    + "\": true," + "\"" + "learner" + "\":{" + "\"" + "address" + "\":{" + "\"" + "address1"
+                    + "\": \"\"," + "\"" + "address2" + "\": \"\"," + "\"" + "city" + "\": \"\"," + "\"" + "country"
+                    + "\": \"\"," + "\"" + "county" + "\": \"\"," + "\"" + "postalCode" + "\": \"\"," + "\"" + "state"
+                    + "\": \"\"}," + "\"" + "canLogin" + "\": true," + "\"" + "currentFirstName" + "\": \""
+                    + StudentFirstName + "\"," + "\"" + "currentLastName" + "\": \"" + StudentLastName + "\"," + "\""
+                    + "currentMiddleName" + "\": \"\"," + "\"" + "currentlyEnrolled" + "\": " + currentlyEnrolled + "," + "\""
+                    + "dateOfBirth" + "\": \"" + DOB + "\"," + "\"" + "email" + "\": \"" + StudentEmail + "\"," + "\""
+                    + "endDate" + "\": " + eDate + "," + "\"" + "fakeUser" + "\": false," + "\"" + "firstName" + "\": \""
+                    + StudentFirstName + "\"," + "\"" + "gender" + "\": \"MALE\"," + "\"" + "gradeLevel" + "\": \"\","
+                    + "\"" + "highestEducationLevel" + "\": \"" + highestLevelEducation + "\"," + "\"" + "lastName"
+                    + "\": \"" + StudentLastName + "\"," + "\"" + "learnerId" + "\": null," + "\"" + "memberId" + "\": "
+                    + memberId + "," + "\"" + "middleName" + "\": \"\"," + "\"" + "nameWhileEnrolled" + "\": \"\","
+                    + "\"" + "phone" + "\": 0," + "\"" + "phonePrefix" + "\": 0," + "\"" + "regSource"
+                    + "\": \"Parchment\"," + "\"" + "rosterStudentId" + "\": " + this.rosterStudentId + "," + "\"" + "ssn" + "\": \"\"," + "\""
+                    + "startDate" + "\": " + sDate + "," + "\"" + "status" + "\": \"\"," + "\"" + "studentFk" + "\": " + studentId
+                    + "," + "\"" + "studentId" + "\": \"\"," + "\"" + "suffix" + "\": \"\"," + "\""
+                    + "validatedStudentId" + "\": \"Y\"," + "\"" + "yearToBeginCollege" + "\": \"\"}}";
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(learnerRequest);
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().accept("application/json").spec(requestSpec).post(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).accept("application/json").spec(requestSpec).post(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            logger.info("Learner creation response:" + response.asString());
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            Verify.verify(successMessage.get(0)
+                    .equals("Successfully created learner with id " + learnerId));
+            databaseConnection.UpdateStartDateAndEndDateForLearner(sDate, eDate, studentId);
+            logger.info(successMessage.get(0));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean createRosterStudent(String schoolName, boolean currentlyEnrolled, String dataReader) {
+        logger.info("Create Roster Student");
+        try {
+            String apiUrl = basicUrl + "learner/roster";
+            int studentId = 0, learnerId = 0;
+            String StudentFirstName = null, StudentLastName = null, StudentEmail = null, DOB = null;
+            switch (dataReader) {
+                case "studentRegistration":
+                case "database":
+                    studentRegistration.signUp(schoolName, currentlyEnrolled);
+                    StudentEmail = studentRegistration.studentEmail;
+                    List<Object> studentDetails = databaseConnection.getStudentDetails(StudentEmail);
+                    studentId = (int) studentDetails.get(4);
+                    StudentFirstName = studentDetails.get(0).toString();
+                    StudentLastName = studentDetails.get(1).toString();
+                    DOB = studentDetails.get(2).toString();
+                    learnerId = databaseConnection.getLearnerId(StudentEmail).get(0);
+                    break;
+
+                case "dynamic":
+                    SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+                    Date date = simpleDateFormat.parse(simpleDateFormat.format(new Date()));
+                    Calendar calendar = Calendar.getInstance();
+                    calendar.setTime(date);
+                    calendar.add(Calendar.YEAR, -16);
+                    String randomText = randomString.string(10);
+                    Random student = new Random();
+                    studentId = 100000 + student.nextInt(900000);
+                    StudentFirstName = randomText;
+                    StudentLastName = randomText;
+                    StudentEmail = "Auto" + randomText + "@qatest.us";
+                    DOB = simpleDateFormat.format(calendar.getTime());
+                    Random learner = new Random();
+                    learnerId = 100000 + learner.nextInt(900000);
+                    break;
+            }
+            SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            Date date = simpleDateFormat.parse(simpleDateFormat.format(new Date()));
+            Calendar calendar = Calendar.getInstance();
+            calendar.setTime(date);
+            calendar.add(Calendar.YEAR, -1);
+            int sDate = calendar.get(Calendar.YEAR);
+            calendar.add(Calendar.YEAR, 5);
+            int eDate = calendar.get(Calendar.YEAR);
+            int memberId = databaseConnection.getMemberPKID(schoolName).get(0);
+            String learnerRequest = "{\n" +
+                    "\"createSmfMemberOnly\": true,\n" +
+                    "\"createStudentMemberOnly\": true,\n" +
+                    "\"learner\": {\n" +
+                    "\"address\": {\n" +
+                    "\"address1\": \"\",\n" +
+                    "\"address2\": \"\",\n" +
+                    "\"city\": \"\",\n" +
+                    "\"country\": \"\",\n" +
+                    "\"county\": \"\",\n" +
+                    "\"postalCode\": \"\",\n" +
+                    "\"state\": \"\"\n" +
+                    "},\n" +
+                    "\"canLogin\": true,\n" +
+                    "\"currentFirstName\": \"" + StudentFirstName + "\",\n" +
+                    "\"currentLastName\": \"" + StudentLastName + "\",\n" +
+                    "\"currentMiddleName\": \"\",\n" +
+                    "\"currentlyEnrolled\": " + currentlyEnrolled + ",\n" +
+                    "\"dateOfBirth\": \"" + DOB + "\",\n" +
+                    "\"email\": \"" + StudentEmail + "\",\n" +
+                    "\"endDate\": " + eDate + ",\n" +
+                    "\"fakeUser\": false,\n" +
+                    "\"firstName\": \"" + StudentFirstName + "\",\n" +
+                    "\"gender\": \"MALE\",\n" +
+                    "\"gradeLevel\": \"\",\n" +
+                    "\"highestEducationLevel\": \"STILL_IN_HS\",\n" +
+                    "\"lastName\": \"" + StudentLastName + "\",\n" +
+                    "\"learnerId\": " + learnerId + ",\n" +
+                    "\"memberId\": " + memberId + ",\n" +
+                    "\"middleName\": \"\",\n" +
+                    "\"nameWhileEnrolled\": \"\",\n" +
+                    "\"phone\": 0,\n" +
+                    "\"phonePrefix\": 0,\n" +
+                    "\"regSource\": \"Parchment\",\n" +
+                    "\"rosterStudentId\": null,\n" +
+                    "\"ssn\": \"\",\n" +
+                    "\"startDate\": " + sDate + ",\n" +
+                    "\"status\": \"\",\n" +
+                    "\"studentFk\": " + studentId + ",\n" +
+                    "\"studentId\": \"" + studentId + "\",\n" +
+                    "\"suffix\": \"\",\n" +
+                    "\"validatedStudentId\": \"\",\n" +
+                    "\"yearToBeginCollege\": \"\"\n" +
+                    "}\n" +
+                    "}";
+
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(learnerRequest);
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().accept("application/json").spec(requestSpec).post(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).accept("application/json").spec(requestSpec).post(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            logger.info("Roster Student Creation Response:" + response.asString());
+            JsonPath jsonPath = new JsonPath(response.asString());
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            Verify.verify(successMessage.get(0).contains("Successfully created roster student for learner id " + learnerId + ", first name " + StudentFirstName + ", last name " + StudentLastName + ", and email address " + StudentEmail + ", with roster student id: " + jsonPath.get("learner.rosterStudentId")));
+            logger.info(successMessage.get(0));
+            this.rosterStudentId = jsonPath.get("learner.rosterStudentId");
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean compareLearnerLookup(String emailId) {
+        logger.info("Compare Learner Lookup / Get Learner");
+        try {
+            int learnerId = databaseConnection.getLearnerId(emailId).get(0);
+            String apiUrl = basicUrl + "learner/" + learnerId;
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            Verify.verify(successMessage.get(0).contains("Successfully found learner"));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean getLearnerByParamValue(String member, String parameter, String value,
+                                          String compareValue) {
+        logger.info("Get Learner By Param Value / Find Learner");
+        String expectedParamValue;
+        try {
+            String apiUrl = basicUrl + "learner/enrollment?memberId=#&#=#";
+            int memberId = databaseConnection.getMemberPKID(member).get(0);
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl.replaceFirst("#", String.valueOf(memberId))
+                        .replaceFirst("#", parameter).replaceFirst("#", value));
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl.replaceFirst("#", String.valueOf(memberId))
+                        .replaceFirst("#", parameter).replaceFirst("#", value));
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            expectedParamValue = new JsonPath(response.asString()).getString(compareValue);
+            if (!expectedParamValue.trim().contains(value)) {
+                return false;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return true;
+    }
+
+    public boolean getUser(String userEmail) {
+        logger.info("GET USERS");
+        try {
+            int userID = databaseConnection.getIndividualId(userEmail).get(0);
+            String apiUrl = basicUrl + "user/" + userID;
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl);
+            }
+            JsonPath jsonpath = new JsonPath(response.getBody().asString());
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            String email = jsonpath.get("email");
+            String studentFirstName = (String) databaseConnection.getStudentDetails(email).get(0);
+            String studentLastName = (String) databaseConnection.getStudentDetails(email).get(1);
+            DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+            String dob = dateFormat.format(databaseConnection.getStudentDetails(email).get(2));
+            Verify.verify(jsonpath.get("firstName").equals(studentFirstName));
+            Verify.verify(jsonpath.get("lastName").equals(studentLastName));
+            Verify.verify(jsonpath.get("birthDate").equals(dob));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean getRosterByParamValue(String email) {
+        logger.info("GET ROSTER BY Parameters Value");
+        List<Integer> studentIdentity, studentId;
+        try {
+            String apiUrl = basicUrl + "learner/roster?memberId=#&#=#";
+            List<Object> list = databaseConnection.getStudentDetailsForRoster(email);
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl.replaceFirst("#", list.get(1).toString())
+                        .replaceFirst("#", "studentMemberId").replaceFirst("#", list.get(0).toString()));
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl.replaceFirst("#", list.get(1).toString())
+                        .replaceFirst("#", "studentMemberId").replaceFirst("#", list.get(0).toString()));
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            studentIdentity = new JsonPath(response.asString()).get("learners.studentId");
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl.replaceFirst("#", list.get(1).toString())
+                        .replaceFirst("#", "studentIdentity").replaceFirst("#", studentIdentity.get(0) + ""));
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl.replaceFirst("#", list.get(1).toString())
+                        .replaceFirst("#", "studentIdentity").replaceFirst("#", studentIdentity.get(0) + ""));
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            studentId = new JsonPath(response.asString()).get("learners.learnerId");
+            if (list.get(0).toString().equalsIgnoreCase(studentId.get(0) + "")) {
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean  findUsers(String userEmail, boolean isValid) {
+        logger.info("Find Users");
+        try {
+            String apiUrl = basicUrl + "user?email=" + userEmail;
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().get(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            JsonPath jsonpath = new JsonPath(response.getBody().asString());
+            String successMessage = jsonpath.getString("successResponse.successMessage");
+            if (successMessage.contains("No users found") && isValid) {
+                return false;
+            } else if (successMessage.contains("No users found") && (!isValid)) {
+                return true;
+            } else {
+                String email = jsonpath.getString("userList.email").substring(1,
+                        jsonpath.getString("userList.email").length() - 1);
+                String firstName = jsonpath.getString("userList.firstName").substring(1,
+                        jsonpath.getString("userList.firstName").length() - 1);
+                String lastName = jsonpath.getString("userList.lastName").substring(1,
+                        jsonpath.getString("userList.lastName").length() - 1);
+                String individualId = jsonpath.getString("userList.id").substring(1,
+                        jsonpath.getString("userList.id").length() - 1);
+                List<Integer> result = databaseConnection.getStudentId(userEmail);
+                int studentId = result.get(0);
+                String paramNames[] = {"individualId", "firstName", "lastName"};
+                String paramValues[] = {individualId, firstName, lastName};
+
+                for (int i = 0; i < paramNames.length; i++) {
+                    String newApi = basicUrl + "user?" + paramNames[i] + "=" + paramValues[i];
+                    Response newApiResponse;
+                    if (basicUrl.contains(".int.")) {
+                        newApiResponse = RestAssured.given().get(newApi);
+                    } else {
+                        newApiResponse = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(newApi);
+                    }
+                    JsonPath newJsonPath = new JsonPath(newApiResponse.getBody().asString());
+                    String ActualValueFromNewAPI;
+                    if (paramNames[i].equalsIgnoreCase("individualId")) {
+                        ActualValueFromNewAPI = newJsonPath.getString("userList.id").substring(1,
+                                newJsonPath.getString("userList.id").length() - 1);
+                    } else {
+                        ActualValueFromNewAPI = newJsonPath.getString("userList." + paramNames[i]).substring(1,
+                                newJsonPath.getString("userList." + paramNames[i]).length() - 1);
+                    }
+                    checkParamNameAndValue(paramNames[i], paramValues[i], ActualValueFromNewAPI);
+                }
+                // checking for studentId
+                String newApi = basicUrl + "user?studentId=" + studentId;
+                Response newApiResponse;
+                if (basicUrl.contains(".int.")) {
+                    newApiResponse = RestAssured.given().get(newApi);
+                } else {
+                    newApiResponse = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).get(newApi);
+                }
+                JsonPath newJsonPath = new JsonPath(newApiResponse.getBody().asString());
+                String newEmail = newJsonPath.getString("userList.email").substring(1,
+                        newJsonPath.getString("userList.email").length() - 1);
+                String newFirstName = newJsonPath.getString("userList.firstName").substring(1,
+                        newJsonPath.getString("userList.firstName").length() - 1);
+                String newLastName = newJsonPath.getString("userList.lastName").substring(1,
+                        newJsonPath.getString("userList.lastName").length() - 1);
+                String newIndividualId = newJsonPath.getString("userList.id").substring(1,
+                        newJsonPath.getString("userList.id").length() - 1);
+
+                if ((userEmail.equalsIgnoreCase(email) && isValid)
+                        || (!userEmail.equalsIgnoreCase(email) && (!isValid))
+                        && (newEmail.equals(email) && newFirstName.equals(firstName)
+                        && newLastName.equals(lastName) && newIndividualId.equals(individualId))) {
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    private static String buildMessage(String field, String expectedValue, String actualValue) {
+        logger.info("Build Message");
+        return "Validation Failed : Field = " + field + " - Expected-" + expectedValue + ", Actual-" + actualValue
+                + "\n";
+    }
+
+    private static void checkParamNameAndValue(String paramName, String ExpectedValue, String ActualValueFromAPI) {
+        if (!ExpectedValue.equalsIgnoreCase(ActualValueFromAPI)) {
+            logger.info(buildMessage(paramName, ExpectedValue, ActualValueFromAPI));
+        }
+    }
+
+    public boolean mergeUserAccounts(String schoolName, boolean currentlyEnrolled) {
+        logger.info("Merge Account");
+        try {
+            String apiUrl = basicUrl + "user/merge";
+            studentRegistration.signUp(schoolName, currentlyEnrolled);
+            String primaryEmail = studentRegistration.studentEmail;
+            studentRegistration.signUp(schoolName, currentlyEnrolled);
+            String secondaryEmail = studentRegistration.studentEmail;
+            int primaryIndId = databaseConnection.getIndividualId(primaryEmail).get(0);
+            int secondaryIndId = databaseConnection.getIndividualId(secondaryEmail).get(0);
+            String mergeRequest = "{\n" +
+                    "\"primaryIndividualId\": " + primaryIndId + ",\n" +
+                    "\"secondaryIndividualId\":" + secondaryIndId + "\n" +
+                    "}";
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(mergeRequest);
+            builder.setContentType("application/json; charset=UTF-8");
+            RequestSpecification requestSpec = builder.build();
+            Response response;
+            if (basicUrl.contains(".int.")) {
+                response = RestAssured.given().accept("application/json").spec(requestSpec).post(apiUrl);
+            } else {
+                response = RestAssured.given().header("authorization", "Bearer " + accessToken.getToken(tokenUrl)).accept("application/json").spec(requestSpec).post(apiUrl);
+            }
+            if (!(response.getStatusCode() == 200)) {
+                logger.info("Error occurred. status code : " + response.getStatusCode());
+                return false;
+            }
+            List<String> successMessage = new JsonPath(response.asString()).get("successResponse.successMessage");
+            Verify.verify(successMessage.get(0).contains("Successfully merged account with individual id " + secondaryIndId + "into the following account for individual id " + primaryIndId));
+            logger.info(successMessage.get(0));
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+        return false;
+    }
+
+    public boolean getRosterStudent(Integer expectedResponseCode, String rosterStudentId){
+        logger.info("getRosterStudent");
+        try{
+            String apiUrl = basicUrl.concat("rosterStudents/").concat(rosterStudentId);
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, null, apiUrl, tokenUrl, "GET");
+            String responseBody = response.asString();
+            if(expectedResponseCode == 200){
+                List<Object> dbDetails = databaseConnection.getStudentDetailsFromRoster(new JsonPath(responseBody).get("emailAddr"));
+                Verify.verify((new JsonPath(responseBody).get("firstName")).equals(dbDetails.get(1).toString()));
+                Verify.verify(new JsonPath(responseBody).get("lastName").equals(dbDetails.get(2).toString()));
+                Verify.verify(new JsonPath(responseBody).get("gender").equals(dbDetails.get(3).toString()));
+                Verify.verify(new JsonPath(responseBody).get("studentId").equals(dbDetails.get(5).toString()));
+                Verify.verify(new JsonPath(responseBody).get("gradYear").toString().equals(dbDetails.get(6).toString()));
+            }else{
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        }catch(Exception e){
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean updateRosterStudent(Integer expectedResponseCode, String rosterStudentEmail) {
+        logger.info("updateRosterStudent");
+        try{
+            String apiUrl = null;
+            List<Object> dbDetails = databaseConnection.getStudentDetailsFromRoster(rosterStudentEmail);
+            if(expectedResponseCode == 200)
+                 apiUrl = basicUrl.replace("v1/","rosterStudents/").concat(dbDetails.get(0).toString());
+            else
+                apiUrl = basicUrl.concat("rosterStudents/").concat(rosterStudentEmail);
+            String middlename = randomString.string(4);
+            Map<String, String> updateReq = new HashMap<>();
+            if(dbDetails != null) {
+                updateReq.put("id", dbDetails.get(0).toString());
+                updateReq.put("transcriptMatchStatus", "WAIT");
+                updateReq.put("transcriptMatchStatus", "WAIT");
+                updateReq.put("emailAddr", rosterStudentEmail);
+                updateReq.put("firstName","Sherlock");
+                updateReq.put("middleName", middlename);
+                updateReq.put("lastName", dbDetails.get(2).toString());
+                updateReq.put("gradYear", "2017");
+                updateReq.put("membrfk", "1848039");
+                updateReq.put("studentRegistrationDate", null);
+                updateReq.put("birthDate", dbDetails.get(4).toString());
+                updateReq.put("currentGradeLevel", null);
+                updateReq.put("gender", dbDetails.get(3).toString());
+                updateReq.put("phone", null);
+                updateReq.put("pin", null);
+                updateReq.put("studentId", dbDetails.get(5).toString());
+                updateReq.put("suffix", null);
+                updateReq.put("navianceRoster", null);
+                updateReq.put("creationDate", "1526508233132");
+                updateReq.put("studentMatchStatus", "MATCHED");
+                updateReq.put("studentMatchAttempts", "");
+                updateReq.put("dxmlMatchAttempts", null);
+                updateReq.put("studentMatchTryTime", "1526508233132");
+                updateReq.put("last4Ssn", null);
+                updateReq.put("address", null);
+                updateReq.put("addressfk", null);
+            }else{
+                updateReq.put("id","string");
+            }
+
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(updateReq);
+            builder.setContentType(TestConstants.CONTENT_TYPE);
+            RequestSpecification reqSpec = builder.build();
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, reqSpec, apiUrl, tokenUrl, "PUT");
+            String responseBody = response.asString();
+            if(expectedResponseCode == 200){
+                Verify.verify(new JsonPath(responseBody).get("middleName").equals(middlename));
+            }else{
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        }catch (Exception e){
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean getIndividualById(Integer expectedResponseCode, String emailAddress) {
+        logger.info("getIndividualById");
+        try {
+            String apiUrl = null;
+            if (expectedResponseCode == 200) {
+                Integer individualId = databaseConnection.getIndividualId(emailAddress).get(0);
+                apiUrl = basicUrl.replace("v1/", "learner/individual/").concat(String.valueOf(individualId));
+            } else {
+                apiUrl = basicUrl.replace("v1/", "learner/individual/").concat(emailAddress);
+            }
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, null, apiUrl, tokenUrl, "GET");
+            String responseBody = response.asString();
+            if (expectedResponseCode == 200) {
+                Verify.verify(new JsonPath(responseBody).getString("emailAddr").equalsIgnoreCase(emailAddress));
+                List<String> emailList = new JsonPath(responseBody)
+                        .get("individualEmails.emailAddress");
+                Verify.verify(emailList.contains(emailAddress));
+            } else {
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean updateIndividualById(Integer expectedResponseCode, String emailAddress) {
+        logger.info("updateIndividualById");
+        try {
+            Integer individualId = databaseConnection.getIndividualId(emailAddress).get(0);
+            String apiUrl = basicUrl.replace("v1/", "learner/individual/").concat(String.valueOf(individualId));
+            JsonObjectBuilder modifiedIndividualDTO = Json.createObjectBuilder()
+                    .add("title", "Mr.")
+                    .add("firstName", "Sherlock")
+                    .add("lastName", "Holmes")
+                    .add("mi", "")
+                    .add("agreedToDiscoverTos", "")
+                    .add("emailAddr", emailAddress)
+                    .add("busPhone", "")
+                    .add("hmPhone", "")
+                    .add("cellPhone", "")
+                    .add("fax", "")
+                    .add("ext", "")
+                    .add("userName", "buez5sis8l5m7cepi12ynetxt")
+                    .add("canLogin", "Y")
+                    .add("lastLogin", "1526511468437")
+                    .add("secureRoles", "")
+                    .add("suffix", "")
+                    .add("phoneExt", "")
+                    .add("rank", "")
+                    .add("fakeUser", "N")
+                    .add("isCreatedInSelfReg", "")
+                    .add("passwResetId", "")
+                    .add("middleName", "")
+                    .add("verifiedEmail", "")
+                    .add("mcPkId", "632794")
+                    .add("showDiscoverPremiumSearchHelp", "")
+                    .add("rememberMeToken", "")
+                    .add("individualEmails", Json.createArrayBuilder()
+                            .add(Json.createObjectBuilder()
+                                    .add("id", "5030739")
+                                    .add("emailAddress", emailAddress)
+                                    .add("verified", true)
+                                    .add("primary", true)
+                                    .add("createDate", "1526508231383")
+                                    .add("lastModified", "1526511473568")
+                                    .build()
+                            ).build()
+                    );
+            if (200 == expectedResponseCode) {
+                modifiedIndividualDTO.add("id", individualId);
+            } else if(500 == expectedResponseCode){
+                modifiedIndividualDTO.add("id", individualId);
+            }else {
+                modifiedIndividualDTO.add("id", individualId + 1);
+            }
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(modifiedIndividualDTO.build().toString());
+            builder.setContentType(TestConstants.CONTENT_TYPE);
+            RequestSpecification reqSpec = builder.build();
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, reqSpec, apiUrl, tokenUrl, "PUT");
+            String responseBody = response.asString();
+            if (expectedResponseCode == 200) {
+                Verify.verify(new JsonPath(responseBody).getString("emailAddr").equalsIgnoreCase(emailAddress));
+                logger.info("Updated individual details for individualId {}", individualId);
+            } else {
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean getStudentById(Integer expectedResponseCode, String emailAddress) {
+        logger.info("getStudentById");
+        try {
+            String apiUrl = null;
+            if (200 == expectedResponseCode) {
+                apiUrl = basicUrl.replace("v1/", "learner/student/")
+                        .concat(String.valueOf(databaseConnection.getStudentId(emailAddress).get(0)));
+            } else {
+                apiUrl = basicUrl.replace("v1/", "learner/student/").concat(emailAddress);
+            }
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, null, apiUrl, tokenUrl, "GET");
+            String responseBody = response.asString();
+            if (200 == expectedResponseCode) {
+                Verify.verify(new JsonPath(responseBody).get("individualDTO.emailAddr").toString()
+                        .equalsIgnoreCase(emailAddress));
+            } else {
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean findStudentByEmail(Integer expectedResponseCode, String emailAddress) {
+        logger.info("findStudentByEmail");
+        try {
+            String apiUrl = null;
+            if (200 == expectedResponseCode) {
+                apiUrl = basicUrl.replace("v1/", "learner/student?email=").concat(emailAddress);
+            } else {
+                apiUrl = basicUrl.replace("v1/", "learner/student/email=")
+                        .concat(emailAddress);
+            }
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, null, apiUrl, tokenUrl, "GET");
+            String responseBody = response.asString();
+            if (200 == expectedResponseCode) {
+                Verify.verify(new JsonPath(responseBody).get("learner.email").toString()
+                        .equalsIgnoreCase(emailAddress));
+                Verify.verify(new JsonPath(responseBody).getInt("learner.studentFk") == databaseConnection
+                        .getStudentId(emailAddress).get(0));
+            } else {
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean updateStudentById(Integer expectedResponseCode, String emailAddress) {
+        logger.info("updateStudentById");
+        try {
+            String apiUrl = null;
+            Integer studentId = 0;
+            if (200 == expectedResponseCode) {
+                studentId = databaseConnection.getStudentId(emailAddress).get(0);
+                apiUrl = basicUrl.replace("v1/", "learner/student/")
+                        .concat(String.valueOf(studentId));
+            } else {
+                apiUrl = basicUrl.replace("v1/", "learner/student/").concat(emailAddress);
+            }
+            JsonObject modifiedStudentDTO = Json.createObjectBuilder()
+                    .add("id", studentId)
+                    .add("addressfk", "")
+                    .add("createDate", "1526508231594")
+                    .add("regSource", "Exchange")
+                    .add("birthDate", "1991-04-04")
+                    .add("caoIdConfirmed", "")
+                    .add("commonAppId", "")
+                    .add("credit", "")
+                    .add("gender", "F")
+                    .add("generation", "")
+                    .add("isParent", "")
+                    .add("parentFirstName", "")
+                    .add("parentLastName", "")
+                    .add("regSessionId", "")
+                    .add("rosterUploaded", "")
+                    .add("ssn", "")
+                    .add("stn", "")
+                    .add("waiveRight", "")
+                    .add("gradeLevel", "")
+                    .add("interestedInCollege", "")
+                    .add("regDataFilled", "")
+                    .add("profilePageFilled", "")
+                    .add("campaignfk", "")
+                    .add("referral", "")
+                    .add("counselorName", "")
+                    .add("counselorEmail", "")
+                    .build();
+            RequestSpecBuilder builder = new RequestSpecBuilder();
+            builder.setBody(modifiedStudentDTO.toString());
+            builder.setContentType(TestConstants.CONTENT_TYPE);
+            RequestSpecification reqSpec = builder.build();
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, reqSpec, apiUrl, tokenUrl, "PUT");
+            String responseBody = response.asString();
+            if (200 == expectedResponseCode) {
+                Verify.verify(new JsonPath(responseBody).getInt("id") == studentId);
+                Verify.verify(new JsonPath(responseBody).get("gender").equals("F"));
+            } else {
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    private Map<String, Object> buildInputs(String caseName, String emailAddress,
+            Map<String, Object> smfMemberDetails) {
+        Map<String, Object> inputMap = new HashMap<>();
+        Long individualId;
+        switch (caseName) {
+            case "individualId":
+                individualId = (Long) smfMemberDetails.get("parchment_id");
+                inputMap.put("individualId", individualId);
+                break;
+            case "emailAddress":
+                inputMap.put("emailAddress", emailAddress);
+                break;
+            case "userName":
+                inputMap.put("userName", smfMemberDetails.get("memberName").toString());
+                break;
+            case "individualId+email":
+                individualId = (Long) smfMemberDetails.get("parchment_id");
+                inputMap.put("individualId", individualId);
+                inputMap.put("emailAddress", emailAddress);
+                break;
+            case "email+userName":
+                inputMap.put("emailAddress", emailAddress);
+                inputMap.put("userName", smfMemberDetails.get("memberName").toString());
+                break;
+            case "individualId+username":
+                individualId = (Long) smfMemberDetails.get("parchment_id");
+                inputMap.put("individualId", individualId);
+                inputMap.put("userName", smfMemberDetails.get("memberName").toString());
+                break;
+            case "All":
+                individualId = (Long) smfMemberDetails.get("parchment_id");
+                inputMap.put("individualId", individualId);
+                inputMap.put("userName", smfMemberDetails.get("memberName").toString());
+                inputMap.put("emailAddress", emailAddress);
+                break;
+            case "CaseFor500":
+                inputMap.put("individualId", "string");
+        }
+        return inputMap;
+    }
+
+    private String buildApiUrl(Integer expectedResponseCode, Map<String, Object> inputMap) {
+        StringBuilder apiUrl = new StringBuilder(basicUrl.replace("v1/", "learner/smfmember"));
+        apiUrl.append("?");
+        if (inputMap.get("individualId") != null) {
+            apiUrl.append("individualId=").append(inputMap.get("individualId"));
+        }
+        if (inputMap.get("emailAddress") != null) {
+            if (apiUrl.charAt(apiUrl.length() - 1) != '?') {
+                apiUrl.append("&");
+            }
+            apiUrl.append("emailAddress=").append(inputMap.get("emailAddress"));
+        }
+        if (inputMap.get("userName") != null) {
+            if (apiUrl.charAt(apiUrl.length() - 1) != '?') {
+                apiUrl.append("&");
+            }
+            apiUrl.append("userName=").append(inputMap.get("userName"));
+        }
+        return apiUrl.toString();
+    }
+
+    public boolean findSmfMember(Integer expectedResponseCode, String caseName, String emailAddress) {
+        logger.info("findSmfMember");
+        try {
+            Map<String, Object> smfMemberDetails = databaseConnection.getSmfMemberDetails(emailAddress);
+            Map<String, Object> inputMap = buildInputs(caseName, emailAddress, smfMemberDetails);
+            String apiUrl = buildApiUrl(expectedResponseCode, inputMap);
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, null, apiUrl, tokenUrl, "GET");
+            String responseBody = response.asString();
+            if (expectedResponseCode == 200) {
+                ArrayList<Map<String, Object>> respList = new JsonPath(responseBody).get();
+                for (Map<String, Object> respMap : respList) {
+                    Verify.verify(respMap.get("id").equals(smfMemberDetails.get("ID_MEMBER")));
+                    Verify.verify(respMap.get("parchmentId")
+                            .equals(((Long) smfMemberDetails.get("parchment_id")).intValue()));
+                    Verify.verify(respMap.get("firstName").equals(smfMemberDetails.get("nameFirst")));
+                    Verify.verify(respMap.get("lastName").equals(smfMemberDetails.get("nameLast")));
+                    Verify.verify(respMap.get("userName").equals(smfMemberDetails.get("memberName")));
+                    Verify.verify(respMap.get("birthDate").equals(smfMemberDetails.get("birthdate").toString()));
+                }
+                logger.info("Verified response for smfmember with email {}", emailAddress);
+            } else {
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean findIndividualByEmail(Integer expectedResponseCode, String emailAddress){
+        logger.info("findIndividualByEmail");
+        try{
+            String apiUrl = basicUrl.replace("v1/", "learner/individual/search?emailAddress=").concat(emailAddress);
+            Response response = getResponse.getResponseAndVerifyResponseCode(expectedResponseCode, null, apiUrl, tokenUrl, "GET");
+            String responseBody = response.asString();
+            if (expectedResponseCode == 200) {
+                ArrayList<Map<String, Object>> respList = new JsonPath(responseBody).get();
+                Verify.verify(respList.get(0).get("emailAddr").toString().equalsIgnoreCase(emailAddress));
+            } else {
+                List<String> errors = new JsonPath(responseBody).get("errors");
+                logger.info(TestConstants.RESP_CODE, response.getStatusCode());
+                logger.info(TestConstants.RESP_MESSAGE, errors.get(0));
+            }
+            return true;
+        }catch (Exception e){
+            logger.error(e.getMessage());
+            return false;
+        }
+    }
+}
