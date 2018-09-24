@@ -1,0 +1,104 @@
+package com.rajhaldar;
+
+import com.google.common.base.Verify;
+import com.jayway.restassured.RestAssured;
+import com.jayway.restassured.builder.RequestSpecBuilder;
+import com.jayway.restassured.path.json.JsonPath;
+import com.jayway.restassured.response.Response;
+
+import javax.json.*;
+
+import com.jayway.restassured.specification.RequestSpecification;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.testng.Assert;
+import org.testng.annotations.Test;
+import sun.misc.Request;
+
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+
+public class RestAssuredFrameworkTest {
+
+
+    @Test
+    public void testGet() {
+        //Response response = RestAssured.get("https://samples.openweathermap.org/data/2.5/weather?q=London,uk&appid=b6907d289e10d714a6e88b30761fae22");
+        Response response = RestAssured.get("http://localhost:3000/posts/");
+        int code = response.getStatusCode();
+        String responseBody = response.asString();
+        //responseBody = responseBody.substring(1, responseBody.length()-1);
+        JsonPath jsonPath = new JsonPath(responseBody);
+        List<Map<String, Object>> responseList = jsonPath.get("");
+
+        for (Map<String, Object> myMap : responseList) {
+            switch ((int) myMap.get("id")) {
+                case 1:
+                    Verify.verify(myMap.get("author").toString().equalsIgnoreCase("typicode"));
+                    break;
+                case 3:
+                    Verify.verify(myMap.get("author").toString().equalsIgnoreCase("typicode-2"));
+                    break;
+            }
+        }
+        Assert.assertEquals(code, 200);
+    }
+
+    @Test
+    public void testPut() {
+
+        JsonObject newPut = Json.createObjectBuilder()
+                .add("id", 2)
+                .add("title", "Harry Potter")
+                .add("author", "J K Rowling")
+                .build();
+        RequestSpecification reqSpec = RestAssured.given();
+        reqSpec.header("Content-Type", "application/json");
+        reqSpec.body(newPut.toString());
+        Response response = reqSpec.put("http://localhost:3000/posts/2");
+        Assert.assertEquals(response.getStatusCode(), 200);
+    }
+
+    @Test
+    public void testPost() {
+        try {
+            JsonArrayBuilder myArray = Json.createArrayBuilder();
+            for (int i = 10; i <= 11; i++) {
+                JsonObjectBuilder newPost = Json.createObjectBuilder();
+                newPost.add("id", i);
+                newPost.add("title", "Testing Application Volume : " + String.valueOf(i));
+                newPost.add("author", "Raj Haldar");
+                RequestSpecification reqSpec = RestAssured.given();
+                reqSpec.header("Content-Type", "application/json");
+                reqSpec.body(newPost.build().toString());
+                Response response = reqSpec.post("http://localhost:3000/posts");
+                Assert.assertEquals(response.getStatusCode(), 201);
+            }
+
+        } catch (Exception e) {
+            System.out.println(e);
+        }
+
+//
+//        JsonObject newPost = Json.createObjectBuilder()
+//                .add("id", 2)
+//                .add("title", "Harry Potter")
+//                .add("author", "Raj Haldar")
+//                .build();
+//        RequestSpecification reqSpec = RestAssured.given();
+//        reqSpec.header("Content-Type", "application/json");
+//        reqSpec.body(newPost.toString());
+//        Response response = reqSpec.post("http://localhost:3000/posts");
+//        Assert.assertEquals(response.getStatusCode(), 201);
+    }
+
+    @Test
+    public void testDelete() {
+
+        RequestSpecification reqSpec = RestAssured.given();
+        Response response = reqSpec.delete("http://localhost:3000/posts/2");
+        Assert.assertEquals(response.getStatusCode(), 200);
+
+    }
+}
